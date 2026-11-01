@@ -1,0 +1,86 @@
+spring:
+  application:
+    name: trade-booking-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/tradebooking}
+    username: ${DB_USERNAME:trade}
+    password: ${DB_PASSWORD:trade}
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+  flyway:
+    enabled: true
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: true
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      # Outbox rows already hold the JSON payload, so key and value are plain strings.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        # Fail fast when Kafka is unreachable so the relay backs off instead of blocking.
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 15000
+
+app:
+  kafka:
+    topics:
+      trade-events: trade-events
+      partitions: 3
+      replicas: 1
+  outbox:
+    relay:
+      enabled: true
+      poll-interval: 500ms
+      batch-size: 100
+      send-timeout: 20s
+      max-backoff: 30s
+    retention: 7d                  # published rows older than this are purged
+    cleanup-cron: "0 15 * * * *"
+    backlog-warn-threshold: 1000
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+# Structured JSON logging (Spring Boot native, Elastic Common Schema).
+# Key/value pairs added via SLF4J's fluent API (addKeyValue) and MDC entries
+# (e.g. correlationId) are emitted as top-level JSON fields.
+logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: trade-booking-service
+  level:
+    root: INFO
+    com.example.tradebooking: INFO
